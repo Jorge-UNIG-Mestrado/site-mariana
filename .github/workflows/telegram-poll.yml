@@ -1,0 +1,35 @@
+name: Telegram → Site
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: telegram-poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run poller
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        run: python3 scripts/telegram_to_site.py
+      - name: Commit changes (se houver)
+        run: |
+          git config user.name  "Mari Bot"
+          git config user.email "bot@marianatavares.cook"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "feat: nova(s) receita(s) via Telegram"
+            git push
+          else
+            echo "nada a commitar"
+          fi
