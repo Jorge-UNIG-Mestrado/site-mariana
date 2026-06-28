@@ -1,0 +1,27 @@
+[
+  {
+    "ingredients": [
+      "500g de patinho moído",
+      "1 xícara de trigo para quibe",
+      "1 cebola ralada"
+    ],
+    "steps": [
+      "Hidrate o trigo por 30 min",
+      "Misture tudo",
+      "Asse 30 min a 200°C"
+    ],
+    "name": "Quibe assado proteico",
+    "category": "petiscos",
+    "time": "45min",
+    "servings": "6",
+    "yt": "https://youtube.com/watch?v=ABC123",
+    "youtubeId": "ABC123",
+    "benefit": "rico em proteína",
+    "emoji": "🥩",
+    "desc": "",
+    "bEmoji": "✨",
+    "views": null,
+    "featured": false,
+    "id": 13
+  }
+]
