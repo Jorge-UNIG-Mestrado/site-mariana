@@ -5,6 +5,24 @@ import json, os, re, sys, urllib.parse, urllib.request, html
 
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 ALLOWED = {8814720795, 5386417208}  # Mari e Jorge
+CATS_VALIDAS = {"fit", "sopas", "cafe", "paes", "petiscos", "sobremesas", "bebidas"}
+ALIAS_CAT = {  # mapeia variações comuns pra categoria oficial
+    "café": "cafe", "lanche": "cafe", "café da manhã": "cafe", "cafe da manha": "cafe",
+    "pão": "paes", "pao": "paes", "paes": "paes",
+    "sopa": "sopas", "petisco": "petiscos", "sobremesa": "sobremesas", "bebida": "bebidas",
+    "fitness": "fit", "saudavel": "fit", "saudável": "fit",
+}
+def normalizar_categoria(raw):
+    """Pega 'cafe / lanche' ou 'café' e devolve 'cafe' (ou None se nada bater)."""
+    if not raw: return None
+    raw = raw.lower().strip()
+    if raw in CATS_VALIDAS: return raw
+    # tenta cada token separado por /, vírgula, etc
+    for tok in re.split(r"[/,;]| e ", raw):
+        tok = tok.strip()
+        if tok in CATS_VALIDAS: return tok
+        if tok in ALIAS_CAT: return ALIAS_CAT[tok]
+    return None
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RECEITAS_JSON = os.path.join(ROOT, "receitas.json")
 DC_HTML = os.path.join(ROOT, "mariana-source.dc.html")
@@ -31,32 +49,49 @@ def parse_receita(text):
     if not text.strip().startswith("/receita"):
         return None
     body = text.split("/receita", 1)[1].strip()
-    rec = {"ingredients": [], "steps": []}
+    rec = {"ingredients": [], "steps": [], "_warnings": []}
     section = None
+    cat_raw = None
     for raw in body.splitlines():
         line = raw.strip()
         if not line:
             continue
         low = line.lower()
         if low.startswith("nome:"):       rec["name"] = line.split(":",1)[1].strip()
-        elif low.startswith("categoria:"):rec["category"] = line.split(":",1)[1].strip().lower()
+        elif low.startswith("categoria:"):cat_raw = line.split(":",1)[1].strip()
         elif low.startswith("tempo:"):    rec["time"] = line.split(":",1)[1].strip()
         elif low.startswith("porções:") or low.startswith("porcoes:"):
             rec["servings"] = line.split(":",1)[1].strip()
         elif low.startswith("youtube:"):
             url = line.split(":",1)[1].strip()
             rec["yt"] = url
-            m = re.search(r"(?:v=|youtu\.be/)([\w-]{6,})", url)
+            # aceita watch?v=, youtu.be/, shorts/, embed/
+            m = re.search(r"(?:v=|youtu\.be/|/shorts/|/embed/)([\w-]{6,})", url)
             rec["youtubeId"] = m.group(1) if m else ""
+            if url and not rec["youtubeId"]:
+                rec["_warnings"].append(f"YouTube ID não reconhecido em {url[:40]} (vídeo vai abrir externo)")
         elif low.startswith("benefício:") or low.startswith("beneficio:"):
             rec["benefit"] = line.split(":",1)[1].strip()
         elif low.startswith("emoji:"):    rec["emoji"] = line.split(":",1)[1].strip()
         elif low.startswith("ingredientes"): section = "ing"
         elif low.startswith("modo"):          section = "step"
-        elif section == "ing" and (line.startswith("-") or line.startswith("•")):
-            rec["ingredients"].append(line.lstrip("-•").strip())
-        elif section == "step" and re.match(r"^\d+[\.\)]\s", line):
-            rec["steps"].append(re.sub(r"^\d+[\.\)]\s*", "", line))
+        elif section == "ing":
+            # aceita: "- item", "• item", "1. item", ou só "item"
+            cleaned = re.sub(r"^[\-•*]\s*", "", line)
+            cleaned = re.sub(r"^\d+[\.\)]\s*", "", cleaned)
+            if cleaned: rec["ingredients"].append(cleaned)
+        elif section == "step":
+            # qualquer linha vira passo, com ou sem numeração
+            cleaned = re.sub(r"^\d+[\.\)]\s*", "", line)
+            if cleaned: rec["steps"].append(cleaned)
+    # normaliza categoria
+    cat_norm = normalizar_categoria(cat_raw)
+    if cat_norm:
+        if cat_raw.lower().strip() != cat_norm:
+            rec["_warnings"].append(f"Categoria ajustada de '{cat_raw}' → '{cat_norm}'")
+        rec["category"] = cat_norm
+    elif cat_raw:
+        rec["_invalid_category"] = cat_raw
     required = ["name", "category", "time"]
     if not all(rec.get(k) for k in required):
         return None
@@ -152,17 +187,29 @@ def main():
         rec = parse_receita(text)
         if not rec:
             if text.strip().startswith("/receita"):
-                reply(chat, "⚠️ Receita incompleta. Preciso de Nome, Categoria e Tempo no mínimo.")
+                # Tenta dar mensagem útil
+                if "_invalid_category" in (parse_receita(text + "\nNome: x\nTempo: x") or {}):
+                    reply(chat, "❌ Categoria inválida. Usa UMA dessas: fit, sopas, cafe, paes, petiscos, sobremesas, bebidas")
+                else:
+                    reply(chat, "⚠️ Receita incompleta. Preciso de Nome, Categoria e Tempo no mínimo.")
+            continue
+        if rec.get("_invalid_category"):
+            reply(chat, f"❌ Categoria '{rec['_invalid_category']}' não existe. Usa UMA dessas: fit, sopas, cafe, paes, petiscos, sobremesas, bebidas")
             continue
         base_id += 1
         rec["id"] = base_id
+        warnings = rec.pop("_warnings", [])
+        rec.pop("_invalid_category", None)
         # Dedup por nome+categoria
         if any(r.get("name") == rec["name"] and r.get("category") == rec["category"] for r in receitas):
             reply(chat, f"⚠️ Já existe receita '{rec['name']}' na categoria {rec['category']}. Pulando.")
             continue
         receitas.append(rec)
         added += 1
-        reply(chat, f"✅ Publicada: {rec['name']} ({rec['category']}). Vai aparecer no site em segundos.")
+        msg = f"✅ Publicada: {rec['name']} ({rec['category']}). Vai aparecer no site em ~1min."
+        if warnings:
+            msg += "\n\nAvisos:\n• " + "\n• ".join(warnings)
+        reply(chat, msg)
     write_offset(last_update)
     if not added:
         print("nada novo válido")
