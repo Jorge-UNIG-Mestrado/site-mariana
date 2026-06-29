@@ -116,28 +116,27 @@ def save_receitas(items):
 
 def splice_into_html(path, new_items_js, escaped=False):
     """Insere recipes JS antes do fechamento `];` da array RECIPES.
-       Marca com sentinela pra ser idempotente — substitui bloco entre marcadores."""
+       Idempotente: SEMPRE remove blocos TG-* antigos antes de inserir o novo."""
     src = open(path, encoding="utf-8").read()
-    nl = "\\n" if escaped else "\n"
-    open_marker = f"/* TG-START */{nl}"
-    close_marker = f"/* TG-END */{nl}"
-    block = f"{open_marker}{new_items_js}{close_marker}"
-    pattern = re.compile(
-        re.escape(open_marker) + r".*?" + re.escape(close_marker),
-        re.DOTALL,
-    )
-    if pattern.search(src):
-        src2 = pattern.sub(block, src)
-    else:
-        # Primeira injeção: insere antes do fechamento  ];
-        close_array = "  ];" if not escaped else "  ];"
-        # Procura o fechamento da array RECIPES — última ocorrência de "  ];" depois de "RECIPES"
-        idx = src.find("RECIPES")
-        end = src.find("  ];", idx)
-        if end < 0:
-            print(f"[!] não achei fechamento da RECIPES em {path}", file=sys.stderr)
-            return False
-        src2 = src[:end] + block + src[end:]
+    OPEN = "/* TG-START */"
+    CLOSE = "/* TG-END */"
+    # 1) Remove TODOS os blocos antigos (lida com versão escapada e não-escapada)
+    pattern = re.compile(re.escape(OPEN) + r".*?" + re.escape(CLOSE), re.DOTALL)
+    src = pattern.sub("", src)
+    # 2) Acha o fechamento da array RECIPES e injeta o novo bloco
+    idx = src.find("RECIPES")
+    if idx < 0:
+        print(f"[!] não achei RECIPES em {path}", file=sys.stderr)
+        return False
+    end = src.find("  ];", idx)
+    if end < 0:
+        print(f"[!] não achei fechamento da RECIPES em {path}", file=sys.stderr)
+        return False
+    block = f"{OPEN}\n{new_items_js}{CLOSE}\n"
+    if escaped:
+        # No index.html (JSON-encoded), tudo precisa ser escapado
+        block = block.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    src2 = src[:end] + block + src[end:]
     open(path, "w", encoding="utf-8").write(src2)
     return True
 
@@ -215,16 +214,10 @@ def main():
         print("nada novo válido")
         return
     save_receitas(receitas)
-    next_id_start = max([r["id"] for r in receitas]) + 1
-    # gera JS dos itens novos pra splice
+    # gera JS dos itens novos pra splice (TODAS as receitas adicionadas pelo bot)
     items_js = "\n".join(to_js_literal(r, r["id"]) for r in receitas) + "\n"
-    # versão escapada pra index.html (JSON-encoded)
-    items_js_escaped = (items_js
-                       .replace("\\", "\\\\")
-                       .replace('"', '\\"')
-                       .replace("\n", "\\n"))
     splice_into_html(DC_HTML, items_js, escaped=False)
-    splice_into_html(COMPILED_HTML, items_js_escaped, escaped=True)
+    splice_into_html(COMPILED_HTML, items_js, escaped=True)
     print(f"adicionadas {added} receitas")
 
 if __name__ == "__main__":
