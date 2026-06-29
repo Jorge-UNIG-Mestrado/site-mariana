@@ -23,5 +23,29 @@
     "views": null,
     "featured": false,
     "id": 13
+  },
+  {
+    "ingredients": [
+      "1 maçã ralada",
+      "2 ovos",
+      "1 medida de whey"
+    ],
+    "steps": [
+      "Acrescente 2 ovos",
+      "Misture tudo e leve a frigideira já quente untada com manteiga para preparar as panquecas , doure os 2 lados e finalize com 1 fio de mel ."
+    ],
+    "name": "panqueca proteica com maçã",
+    "category": "cafe / lanche",
+    "time": "5 min",
+    "servings": "6",
+    "yt": "https://youtube.com/shorts/LFLVXHtSEA0?feature=shared",
+    "youtubeId": "",
+    "benefit": "maçã é uma fruta rica em fibras (como a pectina), vitaminas e antioxidantes. Seus principais benefícios incluem: controle do colesterol e açúcar no sangue, aumento da saciedade (auxiliando na perda de peso), melhora da saúde digestiva e intestinal, além da proteção da saúde do coração + proteína do ovo 13g em 2 ovos + whey 22 gr de proteína por medida .",
+    "emoji": "🍎",
+    "desc": "",
+    "bEmoji": "✨",
+    "views": null,
+    "featured": false,
+    "id": 14
   }
 ]
