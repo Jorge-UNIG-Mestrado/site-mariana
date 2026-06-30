@@ -64,12 +64,20 @@ def parse_receita(text):
             rec["servings"] = line.split(":",1)[1].strip()
         elif low.startswith("youtube:"):
             url = line.split(":",1)[1].strip()
-            rec["yt"] = url
             # aceita watch?v=, youtu.be/, shorts/, embed/
             m = re.search(r"(?:v=|youtu\.be/|/shorts/|/embed/)([\w-]{6,})", url)
-            rec["youtubeId"] = m.group(1) if m else ""
-            if url and not rec["youtubeId"]:
-                rec["_warnings"].append(f"YouTube ID não reconhecido em {url[:40]} (vídeo vai abrir externo)")
+            yid = m.group(1) if m else ""
+            rec["youtubeId"] = yid
+            # URL canônica com www e tipo correto (shorts vs watch)
+            if yid:
+                if "/shorts/" in url:
+                    rec["yt"] = f"https://www.youtube.com/shorts/{yid}"
+                else:
+                    rec["yt"] = f"https://www.youtube.com/watch?v={yid}"
+            else:
+                rec["yt"] = url
+                if url:
+                    rec["_warnings"].append(f"YouTube ID não reconhecido em {url[:40]} (vídeo vai abrir externo)")
         elif low.startswith("benefício:") or low.startswith("beneficio:"):
             rec["benefit"] = line.split(":",1)[1].strip()
         elif low.startswith("emoji:"):    rec["emoji"] = line.split(":",1)[1].strip()
